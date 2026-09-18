@@ -34,40 +34,11 @@ def decompress(data):
     return bytes(out), ver
 
 def compress(raw, ver=1):
-    """Greedy-longest-match LZSS producing the same stream shape."""
-    win = bytearray(RING_FILL_BYTE * N); r = N - F
-    out = bytearray(); i=0; L=len(raw)
-    flagbuf=bytearray(); flags=0; nbits=0; chunk=bytearray()
-    def flush():
-        nonlocal flags,nbits,chunk
-        if nbits:
-            out.append(flags); out.extend(chunk)
-        flags=0; nbits=0; chunk=bytearray()
-    while i < L:
-        best_len=0; best_off=0
-        maxlen=min(F, L-i)
-        if maxlen >= THRESHOLD+1:
-            # search ring buffer for longest match
-            for off in range(N):
-                ln=0
-                while ln<maxlen and win[(off+ln)%N]==raw[i+ln]:
-                    ln+=1
-                if ln>best_len:
-                    best_len=ln; best_off=off
-                    if ln==maxlen: break
-        if best_len > THRESHOLD:
-            chunk.append(best_off & 0xFF)
-            chunk.append(((best_off>>4)&0xF0) | (best_len-THRESHOLD-1))
-            for k in range(best_len):
-                win[r]=raw[i+k]; r=(r+1)%N
-            i+=best_len
-        else:
-            flags |= (1<<nbits)
-            chunk.append(raw[i]); win[r]=raw[i]; r=(r+1)%N; i+=1
-        nbits+=1
-        if nbits==8: flush()
-    flush()
-    return b'\xfe\xef'+struct.pack('>H',ver)+struct.pack('>I',len(raw))+bytes(out)
+    """Compress to a .TP. Delegates to the canonical Okumura port, which
+    reproduces FANUC's own output byte for byte on the reference program."""
+    from . import lzss_encode
+    return lzss_encode.compress(raw, ver)
+
 
 def split_records(raw, start, end):
     """Yield (offset, opcode, payload_bytes, tail2) ; record total = len+2."""

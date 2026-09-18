@@ -24,6 +24,14 @@ def test_reference_record_framing():
     assert last_off + last_len + 2 == 0x1E97
 
 
+def test_byte_identical_recompression():
+    """The strongest gate: re-compressing the reference payload must reproduce
+    FANUC's own bytes exactly, not merely something that decompresses correctly."""
+    ref = open(REF_TP, 'rb').read()
+    raw, ver = container.decompress(ref)
+    assert container.compress(raw, ver) == ref
+
+
 def _roundtrip_cases():
     raw, _ = container.decompress(open(REF_TP, 'rb').read())
     random.seed(7)
