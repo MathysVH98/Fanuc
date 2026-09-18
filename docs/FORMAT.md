@@ -17,7 +17,21 @@ A `.TP` file is an 8-byte header followed by an LZSS-compressed payload.
 
 The stream is Haruhiko Okumura's classic LZSS:
 
-- ring buffer `N = 4096`, **prefilled with `0x20` (space)**
+- ring buffer `N = 4096`, **prefilled with `0x00`**
+
+  Okumura's original `lzss.c` prefills with `0x20` (space); FANUC deviated. This is
+  easy to get wrong because the program-name field *looks* space-padded under a space
+  fill — but that padding is produced *by* the fill, so inferring it that way is
+  circular. The decisive case is `PG21.LS` line 549, `GO[10]=0`:
+
+  | fill | record bytes | value operand |
+  |---|---|---|
+  | `0x00` | `08 17 02 00 0A 64 01 01 `**`00`**` 00` | 0 — correct |
+  | `0x20` | `08 17 02 00 0A 64 01 01 `**`20`**` 00` | 32 — wrong |
+
+  361 of the 9409 payload bytes differ between the two decodes, every one of them
+  `0x20` vs `0x00`.
+
 - max match `F = 18`, `THRESHOLD = 2`
 - write cursor starts at `r = N - F = 4078`
 - a flag byte precedes each group of 8 items, read **LSB-first**
@@ -34,23 +48,34 @@ The `/MN` program body begins at payload offset `0x7F`. Each program line is
 one record:
 
 ```
-<u8 len> <u8 opcode> <payload: len-2 bytes> <u16 tail>
+record := <u8 len> <body: len bytes> <u8 terminator>
 total record size = len + 2
 ```
 
-The 2-byte tail is **not** padding — it carries real little-endian operands:
+`len` counts the opcode and its operands only. The terminator is `0x00` for
+records 1..549. Record 550's terminator slot holds `0xFF` — the first byte of
+the `FF FF 03 00` marker that begins `/POS`, mirroring `FF FF 02 00` at `0x7B`
+before `/MN`.
 
-| line | bytes | note |
-|---|---|---|
-| `GO[10]=21` | `08 17 02 00 0A 64 01 01` + tail `15 00` | `0x15` = 21, the assigned value |
-| `IF DI[67]=ON AND DI[74]=ON,JMP LBL[10]` | `15 78 ...` + tail `0A 00` | `0x0A` = 10, the jump target |
-| any comment | `.. 1E <text>` + tail `00 00` | tail unused |
+A record with `len = 1` is a blank program line (`  ;`).
 
-A record with `len = 1` and no opcode is a blank program line (`  ;`).
+Worked example — `GO[10]=21`:
+
+```
+08 | 17 02 00 0A 64 01 01 15 | 00
+^    ^  ^     ^  ^  ^        ^
+|    |  |     |  |  |        terminator
+|    |  |     |  |  literal int8 operand, value 21
+|    |  |     |  assign operator
+|    |  |     GO index 10
+|    |  variable-reference tag
+|    opcode 0x17 = GO assignment
+len = 8
+```
 
 Parsing `PG21.TP` from `0x7F` yields exactly **550 records**, ending exactly at
-the `/POS` boundary `0x1E97` — matching `LINE_COUNT = 550`. Records map 1:1 and
-in order onto `/MN` lines 1..550.
+the `/POS` boundary — matching `LINE_COUNT = 550`. Records map 1:1 and in order
+onto `/MN` lines 1..550.
 
 ### Opcode census over those 550 records
 

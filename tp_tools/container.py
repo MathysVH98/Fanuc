@@ -3,11 +3,17 @@ import struct
 
 N=4096; F=18; THRESHOLD=2
 
+# The ring buffer is prefilled with 0x00. Okumura's original lzss.c uses 0x20
+# (space); FANUC deviated. Verified against PG21.LS line 549 `GO[10]=0`, whose
+# value operand decodes as 0x00 under this fill and as 0x20 (=32) under a space
+# fill. 361 of the 9409 payload bytes differ between the two.
+RING_FILL_BYTE = b"\x00"
+
 def decompress(data):
     assert data[:2]==b'\xfe\xef', 'bad magic'
     ver = struct.unpack('>H', data[2:4])[0]
     size = struct.unpack('>I', data[4:8])[0]
-    win = bytearray(b' '*N); r = N-F
+    win = bytearray(RING_FILL_BYTE * N); r = N - F
     out = bytearray(); i = 8; L=len(data)
     while i < L and len(out) < size:
         flags = data[i]; i+=1
@@ -29,7 +35,7 @@ def decompress(data):
 
 def compress(raw, ver=1):
     """Greedy-longest-match LZSS producing the same stream shape."""
-    win = bytearray(b' '*N); r = N-F
+    win = bytearray(RING_FILL_BYTE * N); r = N - F
     out = bytearray(); i=0; L=len(raw)
     flagbuf=bytearray(); flags=0; nbits=0; chunk=bytearray()
     def flush():
