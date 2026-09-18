@@ -17,10 +17,25 @@ Where neither is available, these tools do the translation directly.
 | `fixtures/` | reference programs used as the test corpus |
 | `docs/FORMAT.md` | byte-level description of the `.TP` format |
 
+## Usage
+
+```
+./ls2tp.py TARGET.LS --reference REF.TP --out TARGET.TP
+```
+
+A reference `.TP` is required, and not merely as a convenience. `.LS` prints
+positions to three decimals while the binary stores float32, so re-encoding a
+point from text lands it on a neighbouring float32 — every one of the 240
+values in the reference program shifts. Position records are therefore copied
+from the reference rather than re-encoded, and the builder **refuses** to
+synthesise a position that has no bit-exact twin there rather than silently
+shifting a taught point.
+
 ## Status
 
 See `docs/FORMAT.md` for exactly which parts of the format are confirmed
-against a reference binary and which are inferred.
+against a reference binary and which are inferred, and `docs/MN_SPEC.md` /
+`docs/META_SPEC.md` for the byte-level detail.
 
 ## Validation
 
@@ -33,7 +48,10 @@ The codec is held to three gates:
    reproduces the input.
 
 Gate 2 is the important one: it is the only check that proves the encoder
-agrees with FANUC's, rather than merely agreeing with our own decoder.
+agrees with FANUC's, rather than merely agreeing with our own decoder. It
+passes: `compress(decompress(PG21.TP)) == PG21.TP`, 4233 of 4233 bytes.
+
+Run them with `for t in tests/test_*.py; do python3 "$t"; done`.
 
 ## Caveat
 
